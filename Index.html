@@ -1,0 +1,912 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Surf">
+<title>Surf</title>
+<link rel="manifest" href="./manifest.json">
+<link rel="apple-touch-icon" href="./icon-192.png">
+
+<!-- Firebase compat (работают без сборщика, проверено в Skills Tracker) -->
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:wght@500;600&display=swap');
+:root{--bg:#FAF9F5;--card:#FFFFFF;--text:#1C1C1E;--t2:#8A8985;--t3:#C4C3BE;--accent:#1A7AE6;--abg:rgba(26,122,230,.06);--green:#2EBD52;--red:#E8453A;--orange:#E89A0A;--brd:rgba(40,35,20,.06);--sh:0 1px 4px rgba(30,25,10,.03);--st:env(safe-area-inset-top,0px);--sb:env(safe-area-inset-bottom,0px);--f:'DM Sans',-apple-system,sans-serif;--fs:'Playfair Display',Georgia,serif}
+html.dark{--bg:#1A1A1D;--card:#2C2C2E;--text:#F0EFEA;--t2:#9A9A9A;--t3:#5A5A5C;--accent:#4A9FF5;--abg:rgba(74,159,245,.1);--green:#34D058;--red:#F45050;--orange:#F0A830;--brd:rgba(255,255,255,.08);--sh:0 1px 4px rgba(0,0,0,.2)}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none}
+html,body{height:100%;overflow:hidden;font-family:var(--f);background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased;transition:background .3s,color .3s}
+[contenteditable]{-webkit-user-select:text;user-select:text}textarea,input{-webkit-user-select:text;user-select:text}
+
+/* ══ LOGIN SCREEN ══ */
+.login-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:40px 20px;text-align:center;background:var(--bg);position:fixed;inset:0;z-index:9999}
+.login-screen h1{font-family:var(--fs);font-size:32px;font-weight:500;margin-bottom:4px;letter-spacing:-.5px}
+.login-screen h1 b{color:var(--accent);font-weight:500}
+.login-screen p{color:var(--t2);margin-bottom:28px;font-size:14px}
+.login-card{background:var(--card);border:1.5px solid var(--brd);border-radius:16px;padding:28px 24px;width:100%;max-width:380px;box-shadow:0 4px 20px rgba(30,25,10,.06)}
+.login-tabs{display:flex;gap:2px;background:rgba(0,0,0,.04);border-radius:10px;padding:3px;margin-bottom:20px}
+html.dark .login-tabs{background:rgba(255,255,255,.06)}
+.login-tab{flex:1;padding:10px;border:none;background:0;font-family:var(--f);font-size:13px;font-weight:500;border-radius:8px;cursor:pointer;color:var(--t2);transition:all .2s}
+.login-tab.active{background:var(--card);color:var(--text);box-shadow:0 1px 4px rgba(0,0,0,.06)}
+.login-panel{display:none}.login-panel.active{display:block}
+.login-group{margin-bottom:14px;text-align:left}
+.login-group label{display:block;font-size:12px;font-weight:500;margin-bottom:5px;color:var(--t2)}
+.login-group input{width:100%;padding:11px 14px;border:1.5px solid var(--brd);border-radius:10px;font-family:var(--f);font-size:15px;background:var(--bg);color:var(--text);outline:none;transition:border-color .2s}
+.login-group input:focus{border-color:var(--accent)}
+.login-group input::placeholder{color:var(--t3)}
+.login-btn{width:100%;padding:13px;border:none;background:var(--accent);color:#fff;font-family:var(--f);font-size:15px;font-weight:600;border-radius:10px;cursor:pointer;margin-top:6px;transition:all .15s}
+.login-btn:active{transform:scale(.98);opacity:.9}
+.room-code-display{font-family:'Courier New',monospace;font-size:28px;font-weight:700;letter-spacing:.15em;color:var(--accent);background:var(--abg);padding:14px 20px;border-radius:10px;margin:12px 0;text-align:center;user-select:all;-webkit-user-select:all}
+
+/* ══ LAYOUT ══ */
+.app{height:100%;display:flex;flex-direction:column;padding-top:var(--st);position:relative}
+.sb{position:fixed;left:0;top:0;bottom:0;width:260px;background:var(--bg);z-index:210;transform:translateX(-100%);transition:transform .3s cubic-bezier(.22,1,.36,1);box-shadow:4px 0 24px rgba(30,25,10,.08);display:flex;flex-direction:column;padding-top:var(--st)}
+.sb.on{transform:translateX(0)}
+.sb-ov{position:fixed;inset:0;background:rgba(0,0,0,0);z-index:200;display:none;transition:background .25s}.sb-ov.on{display:block;background:rgba(20,18,10,.2)}
+.sb-hdr{padding:16px 16px 12px;border-bottom:1px solid var(--brd);display:flex;align-items:center;justify-content:space-between}
+.sb-title{font-family:var(--fs);font-size:18px;font-weight:500}
+.sb-close{width:28px;height:28px;border:none;background:none;color:var(--t2);cursor:pointer;display:flex;align-items:center;justify-content:center;border-radius:50%}.sb-close:active{background:var(--brd)}.sb-close svg{width:16px;height:16px}
+.sb-list{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:6px 0}.sb-list::-webkit-scrollbar{display:none}
+.sb-item{display:flex;align-items:center;gap:10px;padding:10px 16px;cursor:pointer;transition:background .1s}.sb-item:active{background:rgba(0,0,0,.03)}
+.sb-item.on{background:var(--abg)}.sb-item.on .sb-name{color:var(--accent);font-weight:600}
+.sb-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+.sb-name{font-size:13px;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text)}
+.sb-cnt{font-size:11px;color:var(--t3);flex-shrink:0}
+.sb-add{display:flex;align-items:center;gap:8px;padding:12px 16px;border-top:1px solid var(--brd);cursor:pointer;color:var(--accent);font-size:13px;font-weight:500}.sb-add:active{opacity:.6}
+.sb-add svg{width:16px;height:16px}
+.app-main{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0;position:relative}
+
+/* ══ PTABS ══ */
+.ptabs{position:absolute;left:0;top:50%;transform:translateY(-50%);z-index:18;display:none;flex-direction:column;gap:1px;background:rgba(40,35,20,.03);overflow-y:auto;-webkit-overflow-scrolling:touch;box-shadow:2px 0 12px rgba(30,25,10,.06);border-radius:0 8px 8px 0;overflow:hidden}
+.ptabs.ptabs-open{display:flex}
+.ptab{padding:8px 5px;font-family:var(--f);font-size:9px;font-weight:600;color:var(--t2);background:var(--card);cursor:pointer;text-align:center;letter-spacing:-.2px;line-height:1.2;white-space:nowrap;transition:all .15s;min-width:42px}
+.ptab:active{background:var(--abg)}
+.ptab.on{color:var(--accent);background:var(--abg)}
+
+/* ══ HEADER ══ */
+.hdr{padding:8px 16px 0;flex-shrink:0;z-index:20}
+.hdr-r{display:flex;align-items:center;margin-bottom:6px;gap:4px}
+.logo{font-family:var(--fs);font-size:20px;font-weight:500;letter-spacing:-.5px;flex-shrink:0;display:flex;align-items:center;gap:6px}.logo b{color:var(--accent);font-weight:500}
+.fb-dot{width:7px;height:7px;border-radius:50%;background:var(--red);transition:background .3s;flex-shrink:0}
+.fb-dot.online{background:var(--green)}
+.fb-dot.syncing{background:var(--orange);animation:pulse 1s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.hdr-tabs{flex:1;display:flex;background:rgba(0,0,0,.04);border-radius:8px;padding:2px;margin:0 8px}
+html.dark .hdr-tabs{background:rgba(255,255,255,.06)}
+.hdr-b{display:flex;gap:0;flex-shrink:0}
+.hb{width:36px;height:36px;border:none;border-radius:50%;background:0;color:var(--t2);display:flex;align-items:center;justify-content:center;cursor:pointer}.hb:active{background:var(--brd)}.hb svg{width:18px;height:18px}
+.vb{flex:1;padding:6px 0;border:none;background:0;font-family:var(--f);font-size:13px;font-weight:500;color:var(--t2);border-radius:6px;cursor:pointer;transition:all .15s}.vb.on{background:var(--card);color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.sub-bar{display:flex;align-items:center;justify-content:center;gap:4px;margin-bottom:6px}
+.sub{border:none;background:0;font-family:var(--f);font-size:12px;font-weight:500;color:var(--t3);cursor:pointer;padding:2px 6px;border-radius:4px;transition:all .15s}.sub.on{color:var(--text);font-weight:600}.sub:active{opacity:.7}
+.sub-dot{color:var(--t3);font-size:10px}
+
+/* ══ PROJ DROPDOWN ══ */
+.proj-bar{position:relative;margin-bottom:6px}
+.proj-btn{display:flex;align-items:center;gap:8px;width:100%;padding:8px 14px;border:1.5px solid var(--brd);border-radius:10px;background:var(--card);font-family:var(--f);font-size:15px;font-weight:500;color:var(--text);cursor:pointer}
+.proj-btn .pbl{flex:1;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.proj-btn .pbl.sel{font-family:var(--fs);font-size:22px;font-weight:500;letter-spacing:-.3px}
+.proj-btn .pbc{font-size:11px;color:var(--t3);font-weight:400}
+.proj-btn .pba{color:var(--t3);font-size:13px;transition:transform .2s}.proj-btn.open .pba{transform:rotate(180deg)}
+.proj-dd{position:absolute;top:100%;left:0;right:0;margin-top:4px;background:var(--card);border-radius:12px;box-shadow:0 8px 32px rgba(30,25,10,.12);z-index:50;max-height:0;overflow:hidden;opacity:0;transition:max-height .3s cubic-bezier(.22,1,.36,1),opacity .2s}.proj-dd.open{max-height:360px;opacity:1;overflow:auto}.proj-dd::-webkit-scrollbar{display:none}
+.proj-search{position:sticky;top:0;background:var(--card);padding:10px 12px 8px;border-bottom:1px solid var(--brd);z-index:1}
+.proj-search input{width:100%;border:none;outline:none;font-family:var(--f);font-size:13px;color:var(--text);background:0}.proj-search input::placeholder{color:var(--t3)}
+.pi{display:flex;align-items:center;gap:10px;padding:9px 14px;cursor:pointer}.pi:active{background:rgba(0,0,0,.03)}.pi.on{background:var(--abg)}.pi.on .pin{color:var(--accent);font-weight:600}
+.pid{width:5px;height:5px;border-radius:50%;flex-shrink:0}.pin{font-size:13px;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.pic{font-size:11px;color:var(--t3)}
+.proj-no{padding:16px;text-align:center;font-size:12px;color:var(--t3)}
+
+/* ══ SEARCH ══ */
+.tsrch{padding:6px 20px;border-bottom:1px solid var(--brd);display:none;flex-shrink:0}.tsrch.on{display:block}
+.tsrch input{width:100%;border:none;outline:none;font-family:var(--f);font-size:13px;color:var(--text);background:0}.tsrch input::placeholder{color:var(--t3)}
+
+/* ══ SECTIONS ══ */
+.sec{padding:20px 20px 6px;position:sticky;top:0;z-index:5;background:var(--bg)}.sec:first-child{padding-top:12px}
+.sec-row{display:flex;align-items:baseline;justify-content:space-between}
+.sec-name{font-family:var(--fs);font-size:22px;font-weight:500;color:var(--text);letter-spacing:-.3px;outline:none;flex:1;min-width:0;line-height:1.3}.sec-name:focus{color:var(--accent)}
+.sec-cnt{font-size:11px;color:var(--t3);margin-left:8px;flex-shrink:0}
+
+/* ══ CARDS VIEW ══ */
+.cv{flex:1;overflow:hidden;display:none;flex-direction:column;position:relative}.cv.on{display:flex}
+.cf{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:0 0 90px}.cf::-webkit-scrollbar{display:none}
+.cc{background:var(--card);border-radius:12px;padding:10px 14px;margin:0 16px 5px;box-shadow:var(--sh);position:relative;overflow:hidden;touch-action:pan-y}
+.cc::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px}.cc.ph::before{background:var(--red)}.cc.pm::before{background:var(--orange)}
+.cc .sl,.cc .sr{position:absolute;top:0;bottom:0;width:50px;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;z-index:2}
+.cc .sl{left:0;background:linear-gradient(90deg,rgba(46,189,82,.7),transparent)}.cc .sr{right:0;background:linear-gradient(-90deg,rgba(232,69,58,.7),transparent)}
+.cc .sl svg{color:var(--green);width:18px;height:18px}.cc .sr svg{color:var(--red);width:18px;height:18px}
+.cc-t{font-size:16px;font-weight:500;line-height:1.35;letter-spacing:-.1px}
+.cc.dn{opacity:.3}.cc.dn .cc-t{text-decoration:line-through;color:var(--t2)}
+
+/* ══ FAB + QUICK ADD ══ */
+.fab{position:absolute;bottom:12px;right:20px;width:46px;height:46px;border-radius:50%;background:var(--accent);color:#fff;border:none;box-shadow:0 4px 14px rgba(26,122,230,.3);display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:10;transition:transform .15s}.fab:active{transform:scale(.9)}.fab svg{width:20px;height:20px}
+.qadd{position:absolute;bottom:12px;left:16px;right:76px;background:var(--card);border-radius:12px;box-shadow:0 4px 20px rgba(30,25,10,.1);padding:10px 14px;z-index:11;transform:translateY(16px);opacity:0;pointer-events:none;transition:all .2s cubic-bezier(.22,1,.36,1)}.qadd.on{transform:translateY(0);opacity:1;pointer-events:all}
+.qadd input{width:100%;border:none;outline:none;font-family:var(--f);font-size:16px;color:var(--text);background:0}.qadd input::placeholder{color:var(--t3)}
+.qadd-h{font-size:9px;color:var(--t3);margin-top:3px}
+
+/* ══ LIST VIEW ══ */
+.lv{flex:1;overflow:hidden;display:none;flex-direction:column}.lv.on{display:flex}
+.ln{padding:8px 20px;border-bottom:1px solid var(--brd);flex-shrink:0}
+.ln input{width:100%;border:none;outline:none;font-family:var(--f);font-size:16px;color:var(--text);background:0}.ln input::placeholder{color:var(--t3)}
+.ls{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:80px}.ls::-webkit-scrollbar{display:none}
+.li{display:flex;align-items:center;gap:10px;padding:7px 20px;min-height:38px;position:relative}
+.li.dragging{opacity:.4;background:var(--card);box-shadow:0 4px 16px rgba(0,0,0,.08)}
+.lp{width:3px;height:3px;border-radius:50%;flex-shrink:0}.lp.high{background:var(--red)}.lp.medium{background:var(--orange)}
+.lk{width:18px;height:18px;flex-shrink:0;border:1.5px solid var(--t3);border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .2s cubic-bezier(.34,1.56,.64,1)}.lk:active{transform:scale(.85)}
+.li.dn .lk{background:var(--green);border-color:var(--green)}
+.lk svg{width:10px;height:10px;color:#fff;opacity:0;transform:scale(0);transition:all .2s cubic-bezier(.34,1.56,.64,1)}.li.dn .lk svg{opacity:1;transform:scale(1)}
+.lt{flex:1;font-size:16px;line-height:1.35;color:var(--text);word-break:break-word;outline:none;-webkit-user-modify:read-write-plaintext-only}.lt:focus{color:var(--accent)}.li.dn .lt{color:var(--t3);text-decoration:line-through}
+.ldel{width:24px;height:24px;flex-shrink:0;color:var(--t3);cursor:pointer;display:flex;align-items:center;justify-content:center;border-radius:50%;transition:all .15s}.ldel:active{background:rgba(232,69,58,.1);color:var(--red)}.ldel svg{width:13px;height:13px}
+.ldh{color:var(--t3);flex-shrink:0;display:flex;align-items:center;cursor:grab;padding:4px;touch-action:none}.ldh svg{width:14px;height:14px}
+.sh{padding:14px 20px 4px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--t3);display:flex;justify-content:space-between}
+.sh button{font-size:10px;color:var(--t3);border:none;background:0;cursor:pointer;font-family:var(--f)}
+
+/* ══ NOTES VIEW ══ */
+.nv{flex:1;overflow:hidden;display:none;flex-direction:column}.nv.on{display:flex}
+.nh{font-size:11px;color:var(--t3);padding:6px 20px;border-bottom:1px solid var(--brd);flex-shrink:0;line-height:1.45;display:flex;justify-content:space-between;align-items:center}
+.nh code{background:var(--brd);padding:0 4px;border-radius:3px;font-size:10px}
+.na{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:10px 20px 120px}.na::-webkit-scrollbar{display:none}
+.ne{width:100%;min-height:250px;border:none;outline:none;font-family:var(--f);font-size:16px;line-height:1.6;color:var(--text);background:0;resize:none;padding:0}.ne::placeholder{color:var(--t3)}
+.nb-wrap{padding:8px 20px;flex-shrink:0;background:linear-gradient(transparent,var(--bg) 30%)}
+.nb{width:100%;padding:12px;border:none;border-radius:8px;background:var(--text);color:var(--bg);font-family:var(--f);font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.1)}.nb:active{transform:scale(.98);opacity:.9}
+
+/* ══ RITUAL VIEW ══ */
+.rv{flex:1;overflow:hidden;display:none;flex-direction:column}.rv.on{display:flex}
+.rf{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:8px 20px 80px}.rf::-webkit-scrollbar{display:none}
+.r-prog{display:flex;align-items:center;gap:10px;padding:12px 0 16px}
+.r-bar{flex:1;height:4px;background:var(--brd);border-radius:4px;overflow:hidden}.r-bar-fill{height:100%;background:var(--green);border-radius:4px;transition:width .3s}
+.r-cnt{font-size:12px;color:var(--t2);font-weight:600;min-width:36px;text-align:right}
+.r-sec{margin-bottom:16px}
+.r-sec-hdr{font-family:var(--fs);font-size:22px;font-weight:500;color:var(--text);letter-spacing:-.3px;margin-bottom:8px;display:flex;align-items:baseline;justify-content:space-between}
+.r-sec-cnt{font-size:11px;color:var(--t3);font-weight:400}
+.r-item{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--brd)}
+.r-item:last-child{border-bottom:none}
+.r-chk{width:18px;height:18px;flex-shrink:0;border:1.5px solid var(--t3);border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .2s cubic-bezier(.34,1.56,.64,1)}.r-chk:active{transform:scale(.85)}
+.r-chk.on{background:var(--green);border-color:var(--green)}
+.r-chk svg{width:10px;height:10px;color:#fff;opacity:0;transform:scale(0);transition:all .2s cubic-bezier(.34,1.56,.64,1)}.r-chk.on svg{opacity:1;transform:scale(1)}
+.r-txt{flex:1;font-size:16px;line-height:1.35;color:var(--text);outline:none;-webkit-user-modify:read-write-plaintext-only;word-break:break-word}.r-txt:focus{color:var(--accent)}.r-txt:empty:before{content:'Введите текст...';color:var(--t3);pointer-events:none}
+.r-item.checked .r-txt{color:var(--t3);text-decoration:line-through}
+.r-del{width:20px;height:20px;flex-shrink:0;color:var(--t3);cursor:pointer;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .15s}.r-item:hover .r-del,.r-item:active .r-del{opacity:1}
+.r-del svg{width:12px;height:12px}
+.r-add{display:flex;align-items:center;gap:8px;padding:8px 0;cursor:pointer;color:var(--t3);font-size:13px;transition:color .15s}.r-add:active{color:var(--accent)}
+.r-add svg{width:16px;height:16px}
+
+/* ══ PERSONAL VIEW ══ */
+.pv{flex:1;overflow:hidden;display:none;flex-direction:column}.pv.on{display:flex}
+.pv-hdr{padding:12px 20px 8px;display:flex;align-items:baseline;justify-content:space-between}
+.pv-title{font-family:var(--fs);font-size:22px;font-weight:500;letter-spacing:-.3px}
+.pv-cnt{font-size:11px;color:var(--t3)}
+.pv-input{padding:8px 20px;border-bottom:1px solid var(--brd);flex-shrink:0}
+.pv-input input{width:100%;border:none;outline:none;font-family:var(--f);font-size:16px;color:var(--text);background:0}.pv-input input::placeholder{color:var(--t3)}
+.pv-list{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:80px}.pv-list::-webkit-scrollbar{display:none}
+
+/* ══ BOTTOM BAR ══ */
+.bot{background:rgba(248,247,242,.95);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border-top:1px solid rgba(40,35,20,.08);padding:8px 20px calc(6px + var(--sb));display:flex;justify-content:space-between;align-items:center;flex-shrink:0}
+html.dark .bot{background:rgba(26,26,29,.92);border-top-color:rgba(255,255,255,.06)}
+.bot-i{font-size:11px;color:var(--t2)}.bot-i b{color:var(--text);font-weight:600}
+.bot .hb{color:var(--accent);width:34px;height:34px}
+
+/* ══ OVERLAYS ══ */
+.ov{position:fixed;inset:0;background:rgba(0,0,0,0);z-index:100;display:none;transition:background .3s}.ov.on{display:block;background:rgba(20,18,10,.18);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+.sht{position:fixed;bottom:0;left:0;right:0;background:var(--card);border-radius:16px 16px 0 0;padding:16px 20px calc(16px + var(--sb));z-index:110;transform:translateY(100%);transition:transform .35s cubic-bezier(.22,1,.36,1);box-shadow:0 -4px 16px rgba(30,25,10,.06);max-width:480px;margin:0 auto}.sht.on{transform:translateY(0)}
+.sht-h{width:28px;height:3px;background:var(--t3);border-radius:2px;margin:0 auto 12px;opacity:.2}
+.sht h3{font-family:var(--fs);font-size:18px;margin-bottom:12px;font-weight:500}
+.si{width:100%;padding:10px 12px;border:1.5px solid var(--brd);border-radius:8px;font-family:var(--f);font-size:14px;background:var(--bg);color:var(--text);outline:none;margin-bottom:8px}.si:focus{border-color:var(--accent)}.si::placeholder{color:var(--t3)}
+.sbt{width:100%;padding:12px;border:none;border-radius:8px;background:var(--text);color:var(--bg);font-family:var(--f);font-size:14px;font-weight:600;cursor:pointer}.sbt:active{transform:scale(.98);opacity:.9}
+.tst{position:fixed;bottom:calc(54px + var(--sb));left:50%;transform:translateX(-50%) translateY(12px);background:var(--text);color:var(--bg);padding:8px 16px;border-radius:100px;font-size:11px;font-weight:500;box-shadow:0 8px 20px rgba(30,25,10,.12);z-index:200;opacity:0;pointer-events:none;transition:all .25s;white-space:nowrap}.tst.show{opacity:1;transform:translateX(-50%) translateY(0);pointer-events:all}.tst a{color:var(--accent);margin-left:8px;cursor:pointer;font-weight:600;text-decoration:none}
+.emp{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:50px 30px;text-align:center}
+.emp h3{font-family:var(--fs);font-size:16px;color:var(--t2);font-weight:400;margin-bottom:3px}.emp p{font-size:11px;color:var(--t3)}
+.menu-dd{position:absolute;top:48px;right:20px;background:var(--card);border-radius:12px;box-shadow:0 8px 32px rgba(30,25,10,.14);z-index:60;overflow:hidden;max-height:0;opacity:0;transition:max-height .2s,opacity .15s;min-width:200px}.menu-dd.open{max-height:400px;opacity:1}
+.menu-item{padding:12px 16px;font-size:13px;cursor:pointer;border-bottom:1px solid var(--brd);white-space:nowrap}.menu-item:last-child{border-bottom:none}.menu-item:active{background:rgba(0,0,0,.03)}
+.hidden{display:none!important}
+
+/* ══ USERS ONLINE ══ */
+.users-online{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:4px}
+.user-badge{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:var(--abg);border-radius:12px;font-size:10px;font-weight:500;color:var(--accent)}
+.user-badge .ud{width:5px;height:5px;border-radius:50%;background:var(--green)}
+
+/* ══ DESKTOP ══ */
+@media(min-width:600px){
+  .sb-ov{display:none!important}
+  .sb{transform:translateX(0);position:relative;box-shadow:none;border-right:1px solid var(--brd)}
+  .sb-close{display:none}
+  .app{max-width:900px;flex-direction:row;margin:0 auto}
+  .app>.sb{flex-shrink:0}
+  .logo .hb{display:none}
+  .hb-menu{display:none!important}
+  .ptabs{display:none!important}
+}
+</style>
+</head>
+<body>
+
+<!-- ══ LOGIN SCREEN ══ -->
+<div id="loginScreen" class="login-screen">
+<h1>Sur<b>f</b></h1>
+<p>Задачи · Заметки · Ритуалы — с синхронизацией</p>
+<div class="login-card">
+<div class="login-tabs">
+<button class="login-tab active" onclick="switchLoginTab('personal')">👤 Личный</button>
+<button class="login-tab" onclick="switchLoginTab('shared')">👥 Совместный</button>
+</div>
+<div id="tab-personal" class="login-panel active">
+<div class="login-group"><label>Ваше имя</label><input type="text" id="personalName" placeholder="Как вас называть?" autocomplete="name"></div>
+<button class="login-btn" onclick="loginPersonal()">Начать</button>
+</div>
+<div id="tab-shared" class="login-panel">
+<div class="login-group"><label>Ваше имя</label><input type="text" id="sharedName" placeholder="Как вас называть?" autocomplete="name"></div>
+<div class="login-group"><label>Код комнаты (пусто = создать новую)</label><input type="text" id="roomCodeInput" placeholder="например: k7x2m9" style="font-family:monospace;font-size:18px;text-align:center;letter-spacing:.1em" autocomplete="off"></div>
+<button class="login-btn" onclick="loginShared()">Войти / Создать</button>
+</div>
+</div>
+</div>
+
+<!-- ══ MAIN APP ══ -->
+<div class="app hidden" id="appScreen">
+<div class="sb" id="sb">
+<div class="sb-hdr"><span class="sb-title">Проекты</span><button class="sb-close" onclick="closeSB()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>
+<div class="sb-list" id="sb-list"></div>
+<div class="sb-add" onclick="closeSB();openSheet()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Новый проект</div>
+</div>
+<div class="sb-ov" id="sb-ov" onclick="closeSB()"></div>
+<div class="app-main">
+<div class="hdr">
+<div class="hdr-r"><button class="hb hb-menu" onclick="togglePtabs()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button><div class="logo">Sur<b>f</b> <div class="fb-dot" id="fbDot" title="Firebase статус"></div></div><div class="hdr-tabs"><button class="vb on" data-v="tasks" onclick="setView('tasks')">Задачи</button><button class="vb" data-v="notes" onclick="setView('notes')">Заметки</button><button class="vb" data-v="ritual" onclick="setView('ritual')">Ритуал</button></div><div class="hdr-b"><button class="hb" onclick="toggleSearch()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.35-4.35"/></svg></button><button class="hb" onclick="toggleMenu()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg></button></div></div>
+<div class="menu-dd" id="menu-dd">
+<div class="menu-item" id="dm-toggle" onclick="toggleDark();toggleMenu()">🌙 Ночной режим</div>
+<div class="menu-item" onclick="doSync();toggleMenu()">☁️ Синхронизация</div>
+<div class="menu-item" onclick="doForceLoad();toggleMenu()">⬇️ Загрузить из облака</div>
+<div class="menu-item" onclick="doShowStatus();toggleMenu()">📡 Статус Firebase</div>
+<div class="menu-item" onclick="doExport();toggleMenu()">📤 Экспорт текст</div>
+<div class="menu-item" onclick="doExportJSON();toggleMenu()">💾 Экспорт JSON</div>
+<div class="menu-item" onclick="doImportJSON();toggleMenu()">📥 Импорт JSON</div>
+<div class="menu-item" onclick="doLogout();toggleMenu()">🚪 Выйти</div>
+</div>
+<input type="file" id="imp-file" accept=".json" style="display:none">
+<div class="users-online hidden" id="usersOnline"></div>
+<div class="sub-bar" id="sub-bar"><button class="sub" data-s="list" onclick="setSub('list')">Список</button><span class="sub-dot">·</span><button class="sub on" data-s="cards" onclick="setSub('cards')">Карточки</button><span class="sub-dot">·</span><button class="sub" data-s="personal" onclick="setSub('personal')">Личные</button></div>
+<div class="proj-bar" id="proj-bar"><button class="proj-btn" id="proj-btn" onclick="toggleDD()"><span class="pbl" id="pbl">Все проекты</span><span class="pbc" id="pbc"></span><span class="pba">▾</span></button><div class="proj-dd" id="proj-dd"><div class="proj-search"><input type="text" id="proj-si" placeholder="Найти проект..." oninput="filterDD(this.value)" autocomplete="off"></div><div id="proj-list"></div></div></div>
+</div>
+<div class="tsrch" id="tsrch"><input type="text" id="tsrch-i" placeholder="Поиск задач..." oninput="onSearch(this.value)"></div>
+<div class="ptabs" id="ptabs"></div>
+<div class="cv on" id="v-cards"><div class="cf" id="cf"></div><button class="fab" onmousedown="toggleQA()" ontouchend="event.preventDefault();toggleQA()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button><div class="qadd" id="qadd"><input type="text" id="qa-in" placeholder="Новая задача..." autocomplete="off"><div class="qadd-h">Enter · !!! приоритет · #проект</div></div></div>
+<div class="lv" id="v-list"><div class="ln"><input type="text" id="li-in" placeholder="+ задача (!!! приоритет #проект)" autocomplete="off"></div><div class="ls" id="ls"></div></div>
+<div class="nv" id="v-notes">
+<div class="nh"><span>Заметки сохраняются автоматически · <code>Создать задачи</code> — парсит строки</span></div>
+<div class="na"><textarea class="ne" id="ne" placeholder="Пиши заметки или задачи..." oninput="saveNotes()"></textarea></div>
+<div class="nb-wrap"><button class="nb" onclick="parseNotes()">Создать задачи из текста</button></div>
+</div>
+<div class="rv" id="v-ritual"><div class="rf" id="rf"></div></div>
+<div class="pv" id="v-personal">
+<div class="pv-hdr"><span class="pv-title">Личное</span><span class="pv-cnt" id="pv-cnt"></span></div>
+<div class="pv-input"><input type="text" id="pv-in" placeholder="+ личная задача..." autocomplete="off"></div>
+<div class="pv-list" id="pv-list"></div>
+</div>
+<div class="bot"><div class="bot-i" id="bot-i"></div><button class="hb" onclick="openSheet()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button></div>
+</div>
+<div class="ov" id="ov" onclick="closeSheet()"></div>
+<div class="sht" id="sht"><div class="sht-h"></div><h3>Новый проект</h3><input class="si" id="sh-n" placeholder="Название проекта" autocomplete="off"><button class="sbt" onclick="addProj()">Создать</button></div>
+<div class="tst" id="tst"></div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// 1. ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ (ВСЕ объявлены в самом начале!)
+//    Урок из Skills Tracker: необъявленная переменная = крах
+// ═══════════════════════════════════════════════════════════════
+
+// Firebase
+let fbDb = null;
+let fbAuth = null;
+let fbUser = null;
+let fbEnabled = false;
+let fbSyncInProgress = false;
+let fbUnsubscribe = null;
+
+// Auth
+let appMode = null;      // 'personal' | 'shared'
+let userName = '';
+let roomCode = '';
+let userId = '';
+let storagePrefix = '';
+
+// App data
+var T=[], P=[], view='tasks', sub='cards', proj='all', taskQ='', showDone=true, lastDel=null, ddOpen=false, qaOpen=false, ptabsOpen=false;
+var PT=[]; // Personal tasks
+var darkMode=false;
+var notesText='';
+
+// Ritual
+var R={morning:[],evening:[],checks:{},lastReset:''};
+var RBLOCKS=[{key:'morning',label:'Утро ☀'},{key:'evening',label:'Вечер 🌙'}];
+var R_DEFAULTS={morning:[{id:'rd1',text:'Конструкторы'},{id:'rd2',text:'Яна'}],evening:[{id:'rd3',text:'Анализ чатов'}]};
+
+// ═══════════════════════════════════════════════════════════════
+// 2. КОНФИГУРАЦИЯ
+// ═══════════════════════════════════════════════════════════════
+
+const APP_NAME = 'surf-tasks';
+const APP_TITLE = 'Surf';
+
+const FB_CONFIG = {
+    apiKey: "AIzaSyAgIA0PLvUOJsRN8tHRzC03evTTkt3KHHc",
+    authDomain: "skills-tracker-3f21b.firebaseapp.com",
+    projectId: "skills-tracker-3f21b",
+    storageBucket: "skills-tracker-3f21b.firebasestorage.app",
+    messagingSenderId: "108202530564",
+    appId: "1:108202530564:web:31ecf70071f49a89abe251"
+};
+
+// ═══════════════════════════════════════════════════════════════
+// 3. УТИЛИТЫ
+// ═══════════════════════════════════════════════════════════════
+
+function simpleHash(str) {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+        const char = str.charCodeAt(i);
+        hash = ((hash << 5) - hash) + char;
+        hash = hash & hash;
+    }
+    return Math.abs(hash).toString(36);
+}
+
+function generateRoomCode() {
+    const chars = 'abcdefghjkmnpqrstuvwxyz23456789';
+    let code = '';
+    for (let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
+    return code;
+}
+
+function esc(s){var d=document.createElement('div');d.textContent=s||'';return d.innerHTML}
+var CL=['#A855C7','#D98A08','#2EBD52','#E8453A','#1A7AE6','#4ABDD4','#B09A20','#A68960'];
+function pC(i){return CL[((i%CL.length)+CL.length)%CL.length]}
+
+// ═══════════════════════════════════════════════════════════════
+// 4. FIREBASE — инициализация
+// ═══════════════════════════════════════════════════════════════
+
+function initFirebase() {
+    try {
+        firebase.initializeApp(FB_CONFIG);
+        fbDb = firebase.firestore();
+        fbAuth = firebase.auth();
+
+        fbAuth.signInAnonymously()
+            .then(function(result) {
+                fbUser = result.user;
+                fbEnabled = true;
+                updateFbDot('online');
+                console.log('✅ Firebase OK | User:', userId, '| Mode:', appMode);
+                loadFromFirebase();
+            })
+            .catch(function(err) {
+                console.error('❌ Firebase auth:', err);
+                fbEnabled = false;
+                updateFbDot('offline');
+            });
+    } catch (err) {
+        console.error('❌ Firebase init:', err);
+        fbEnabled = false;
+        updateFbDot('offline');
+    }
+}
+
+function getDocRef() {
+    if (appMode === 'shared') {
+        return fbDb.collection('apps').doc(APP_NAME)
+                    .collection('rooms').doc(roomCode);
+    } else {
+        return fbDb.collection('apps').doc(APP_NAME)
+                    .collection('users').doc(userId);
+    }
+}
+
+function updateFbDot(state) {
+    var dot = document.getElementById('fbDot');
+    if (!dot) return;
+    dot.className = 'fb-dot ' + state;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 5. FIREBASE — сохранение
+// ═══════════════════════════════════════════════════════════════
+
+async function saveToFirebase() {
+    if (!fbEnabled || fbSyncInProgress) return;
+    fbSyncInProgress = true;
+    updateFbDot('syncing');
+
+    try {
+        var allData = {
+            tasks: T,
+            projects: P,
+            ritual: R,
+            notes: notesText,
+            personalTasks: PT
+        };
+
+        var payload = {
+            data: JSON.stringify(allData),
+            lastSync: firebase.firestore.FieldValue.serverTimestamp(),
+            updatedBy: userName,
+            appVersion: '2.0',
+            mode: appMode
+        };
+
+        if (appMode === 'shared') {
+            payload.users = firebase.firestore.FieldValue.arrayUnion(userName);
+        }
+
+        await getDocRef().set(payload, { merge: true });
+        console.log('☁️ Saved to Firebase');
+        updateFbDot('online');
+    } catch (err) {
+        console.error('❌ Save:', err);
+        updateFbDot('offline');
+        toast('Ошибка сохранения ☁️');
+    } finally {
+        fbSyncInProgress = false;
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 6. FIREBASE — загрузка (с защитой от дублей)
+// ═══════════════════════════════════════════════════════════════
+
+async function loadFromFirebase() {
+    if (window._fbLoadRunning) return;
+    window._fbLoadRunning = true;
+
+    if (!fbEnabled || fbSyncInProgress) {
+        window._fbLoadRunning = false;
+        return;
+    }
+    fbSyncInProgress = true;
+    updateFbDot('syncing');
+
+    try {
+        var doc = await getDocRef().get();
+        if (doc.exists && doc.data().data) {
+            var remote = JSON.parse(doc.data().data);
+            applyRemoteData(remote);
+            saveLocal();
+            renderAll();
+            updateFbDot('online');
+            toast('☁️ Данные загружены');
+
+            if (appMode === 'shared' && doc.data().users) {
+                renderUsersOnline(doc.data().users);
+            }
+        } else {
+            // Нет данных в облаке — создаём документ из локальных
+            saveToFirebase();
+            updateFbDot('online');
+        }
+    } catch (err) {
+        console.error('❌ Load:', err);
+        updateFbDot('offline');
+    } finally {
+        fbSyncInProgress = false;
+        window._fbLoadRunning = false;
+    }
+}
+
+function applyRemoteData(remote) {
+    if (remote.tasks) T = remote.tasks;
+    if (remote.projects) P = remote.projects;
+    if (remote.ritual) R = remote.ritual;
+    if (typeof remote.notes === 'string') {
+        notesText = remote.notes;
+        var ne = document.getElementById('ne');
+        if (ne) ne.value = notesText;
+    }
+    if (remote.personalTasks) PT = remote.personalTasks;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 7. FIREBASE — realtime (для совместного режима)
+// ═══════════════════════════════════════════════════════════════
+
+function startRealtimeSync() {
+    if (!fbEnabled) return;
+    if (fbUnsubscribe) fbUnsubscribe();
+
+    fbUnsubscribe = getDocRef().onSnapshot(function(doc) {
+        if (!doc.exists || fbSyncInProgress) return;
+
+        var remoteData = doc.data();
+        if (remoteData.updatedBy === userName) return;
+
+        try {
+            var parsed = JSON.parse(remoteData.data);
+            applyRemoteData(parsed);
+            saveLocal();
+            renderAll();
+            toast(remoteData.updatedBy + ' обновил(а) данные');
+
+            if (remoteData.users) {
+                renderUsersOnline(remoteData.users);
+            }
+        } catch (e) {
+            console.error('Realtime parse error:', e);
+        }
+    }, function(err) {
+        console.error('Realtime error:', err);
+    });
+}
+
+function renderUsersOnline(users) {
+    var el = document.getElementById('usersOnline');
+    if (!el || !users) return;
+    el.classList.remove('hidden');
+    el.innerHTML = users.map(function(u) {
+        return '<span class="user-badge"><span class="ud"></span>' + esc(u) + '</span>';
+    }).join('');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 8. LOCAL STORAGE — fallback
+// ═══════════════════════════════════════════════════════════════
+
+function saveLocal() {
+    try {
+        localStorage.setItem(storagePrefix + 'tasks', JSON.stringify(T));
+        localStorage.setItem(storagePrefix + 'projects', JSON.stringify(P));
+        localStorage.setItem(storagePrefix + 'ritual', JSON.stringify(R));
+        localStorage.setItem(storagePrefix + 'notes', notesText);
+        localStorage.setItem(storagePrefix + 'pt', JSON.stringify(PT));
+    } catch(e) {}
+}
+
+function loadLocal() {
+    try {
+        var t = localStorage.getItem(storagePrefix + 'tasks');
+        var p = localStorage.getItem(storagePrefix + 'projects');
+        var r = localStorage.getItem(storagePrefix + 'ritual');
+        var n = localStorage.getItem(storagePrefix + 'notes');
+        var pt = localStorage.getItem(storagePrefix + 'pt');
+        if (t) T = JSON.parse(t);
+        if (p) P = JSON.parse(p);
+        if (r) R = JSON.parse(r);
+        if (n !== null) notesText = n;
+        if (pt) PT = JSON.parse(pt);
+    } catch(e) {}
+}
+
+// Общая функция: local + cloud
+function saveAll() {
+    saveLocal();
+    if (fbEnabled) saveToFirebase();
+}
+
+function saveNotes() {
+    notesText = document.getElementById('ne').value;
+    saveAll();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 9. ВХОД — авторизация
+// ═══════════════════════════════════════════════════════════════
+
+function switchLoginTab(tab) {
+    document.querySelectorAll('.login-tab').forEach(function(t) { t.classList.remove('active') });
+    document.querySelectorAll('.login-panel').forEach(function(p) { p.classList.remove('active') });
+    document.querySelector('[onclick="switchLoginTab(\'' + tab + '\')"]').classList.add('active');
+    document.getElementById('tab-' + tab).classList.add('active');
+}
+
+function loginPersonal() {
+    var name = document.getElementById('personalName').value.trim();
+    if (!name) { alert('Введите имя'); return; }
+    appMode = 'personal';
+    userName = name;
+    userId = 'u_' + simpleHash(name + '_personal');
+    storagePrefix = APP_NAME + '_' + userId + '_';
+    roomCode = '';
+    startApp();
+}
+
+function loginShared() {
+    var name = document.getElementById('sharedName').value.trim();
+    if (!name) { alert('Введите имя'); return; }
+    var code = document.getElementById('roomCodeInput').value.trim().toLowerCase();
+
+    appMode = 'shared';
+    userName = name;
+    roomCode = code || generateRoomCode();
+    userId = 'r_' + roomCode;
+    storagePrefix = APP_NAME + '_' + userId + '_';
+    startApp();
+}
+
+function tryLocalAutoLogin() {
+    var savedMode = localStorage.getItem(APP_NAME + '_lastMode');
+    var savedUser = localStorage.getItem(APP_NAME + '_lastUser');
+    var savedRoom = localStorage.getItem(APP_NAME + '_lastRoom');
+    var savedUserId = localStorage.getItem(APP_NAME + '_lastUserId');
+
+    if (savedMode && savedUser && savedUserId) {
+        appMode = savedMode;
+        userName = savedUser;
+        userId = savedUserId;
+        roomCode = savedRoom || '';
+        storagePrefix = APP_NAME + '_' + userId + '_';
+        startApp();
+        return true;
+    }
+    return false;
+}
+
+function startApp() {
+    localStorage.setItem(APP_NAME + '_lastMode', appMode);
+    localStorage.setItem(APP_NAME + '_lastUser', userName);
+    localStorage.setItem(APP_NAME + '_lastUserId', userId);
+    if (roomCode) localStorage.setItem(APP_NAME + '_lastRoom', roomCode);
+
+    document.getElementById('loginScreen').classList.add('hidden');
+    document.getElementById('appScreen').classList.remove('hidden');
+
+    // Dark mode
+    darkMode = localStorage.getItem('s7dark') === '1';
+    applyDark();
+
+    // Загружаем view/sub/proj
+    view = localStorage.getItem(storagePrefix + 'view') || 'tasks';
+    sub = localStorage.getItem(storagePrefix + 'sub') || 'cards';
+    proj = localStorage.getItem(storagePrefix + 'proj') || 'all';
+
+    // Загружаем локальные данные
+    loadLocal();
+
+    // Init ritual defaults
+    if (!R.checks) R.checks = {};
+    if (!R.lastReset) R.lastReset = '';
+    if (!R.morning) R.morning = [];
+    if (!R.evening) R.evening = [];
+    if (!R.morning.length && !R.evening.length) {
+        R.morning = R_DEFAULTS.morning.slice();
+        R.evening = R_DEFAULTS.evening.slice();
+    }
+
+    // Notes
+    var ne = document.getElementById('ne');
+    if (ne) ne.value = notesText;
+
+    // Render
+    renderAll();
+    setView(view);
+
+    // Firebase
+    initFirebase();
+
+    // Realtime для совместного
+    if (appMode === 'shared') {
+        setTimeout(function() {
+            startRealtimeSync();
+            toast('Комната: ' + roomCode);
+        }, 2000);
+        document.getElementById('usersOnline').classList.remove('hidden');
+    }
+
+    console.log('🚀 ' + APP_NAME + ' | ' + appMode + ' | user: ' + userName + ' | id: ' + userId);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 10. DARK MODE
+// ═══════════════════════════════════════════════════════════════
+
+function toggleDark(){darkMode=!darkMode;localStorage.setItem('s7dark',darkMode?'1':'0');applyDark()}
+function applyDark(){document.documentElement.classList.toggle('dark',darkMode);var el=document.getElementById('dm-toggle');if(el)el.textContent=darkMode?'☀️ Дневной режим':'🌙 Ночной режим'}
+
+// ═══════════════════════════════════════════════════════════════
+// 11. RENDER — основной
+// ═══════════════════════════════════════════════════════════════
+
+function sv(){
+    localStorage.setItem(storagePrefix+'view',view);
+    localStorage.setItem(storagePrefix+'proj',proj);
+    localStorage.setItem(storagePrefix+'sub',sub);
+}
+
+function fil(){var t=T.slice();if(proj!=='all')t=t.filter(function(x){return x.project===proj});if(taskQ){var q=taskQ.toLowerCase();t=t.filter(function(x){return x.text.toLowerCase().indexOf(q)>=0||(x.project||'').toLowerCase().indexOf(q)>=0})}return t}
+function grouped(items){var map={};items.forEach(function(t){var p=t.project||'Без проекта';if(!map[p])map[p]={name:p,un:[],dn:[]};if(t.done)map[p].dn.push(t);else map[p].un.push(t)});return Object.values(map).sort(function(a,b){return b.un.length-a.un.length||a.name.localeCompare(b.name)})}
+
+function renderAll(){rPB();rBot();rPTabs();if(sbOpen||window.innerWidth>=600)rSB();if(sub==='cards')rCards();else if(sub==='list')rList()}
+function render(){renderAll()}
+
+function togglePtabs(){if(window.innerWidth>=600)return;ptabsOpen=!ptabsOpen;document.getElementById('ptabs').classList.toggle('ptabs-open',ptabsOpen)}
+
+function rPTabs(){var el=document.getElementById('ptabs');if(view!=='tasks'){el.classList.remove('ptabs-open');ptabsOpen=false;return}var h='<div class="ptab'+(proj==='all'?' on':'')+'" onclick="selProj(\'all\')">Все</div>';P.forEach(function(p){var en=esc(p.name).replace(/'/g,"\\'");var label=p.name.length>9?p.name.slice(0,9):p.name;h+='<div class="ptab'+(proj===p.name?' on':'')+'" onclick="selProj(\''+en+'\')">'+esc(label)+'</div>'});el.innerHTML=h}
+
+function rPB(){var c=proj==='all'?T.filter(function(t){return!t.done}).length:T.filter(function(t){return t.project===proj&&!t.done}).length;var lbl=document.getElementById('pbl');lbl.textContent=proj==='all'?'Все проекты':proj;lbl.classList.toggle('sel',proj!=='all');document.getElementById('pbc').textContent=c+''}
+
+function rDD(q){q=q||'';var el=document.getElementById('proj-list'),ql=q.toLowerCase();var items=ql?P.filter(function(p){return p.name.toLowerCase().indexOf(ql)>=0}):P;var h='<div class="pi '+(proj==='all'?'on':'')+'" onclick="selProj(\'all\')"><div class="pid" style="background:var(--text)"></div><span class="pin" style="font-weight:600">Все проекты</span><span class="pic">'+T.filter(function(t){return!t.done}).length+'</span></div>';items.forEach(function(p){var i=P.indexOf(p),cnt=T.filter(function(t){return t.project===p.name&&!t.done}).length,en=esc(p.name).replace(/'/g,"\\'");h+='<div class="pi '+(proj===p.name?'on':'')+'" onclick="selProj(\''+en+'\')"><div class="pid" style="background:'+pC(i)+'"></div><span class="pin">'+esc(p.name)+'</span><span class="pic">'+(cnt||'')+'</span></div>'});if(!items.length&&ql)h+='<div class="proj-no">Не найдено</div>';el.innerHTML=h}
+
+function rBot(){var a=T.filter(function(t){return!t.done}).length;var modeLabel=appMode==='shared'?'👥 '+roomCode:'👤';document.getElementById('bot-i').innerHTML='<b>'+a+'</b> активных · '+T.length+' всего · '+modeLabel}
+
+var CHK='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>';
+var XS='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+var GRIP='<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg>';
+
+function secH(n,c){return'<div class="sec"><div class="sec-row"><div class="sec-name" contenteditable="true" data-orig="'+esc(n)+'" spellcheck="false">'+esc(n)+'</div><span class="sec-cnt">'+c+'</span></div></div>'}
+function cH(t){return'<div class="cc '+(t.pri==='high'?'ph':t.pri==='medium'?'pm':'')+' '+(t.done?'dn':'')+'" data-id="'+t.id+'"><div class="sl">'+CHK+'</div><div class="sr">'+XS+'</div><div class="cc-t">'+esc(t.text)+'</div></div>'}
+function lH(t){return'<div class="li '+(t.done?'dn':'')+'" data-id="'+t.id+'"><div class="lp '+t.pri+'"></div><div class="lk" onclick="event.stopPropagation();tglDone(\''+t.id+'\')">'+CHK+'</div><div class="lt" contenteditable="'+(t.done?'false':'true')+'" data-id="'+t.id+'" onblur="onEdit(this)" onkeydown="if(event.key===\'Enter\'){event.preventDefault();this.blur()}">'+esc(t.text)+'</div><div class="ldel" onclick="event.stopPropagation();delTask(\''+t.id+'\')" title="Удалить">'+XS+'</div><div class="ldh">'+GRIP+'</div></div>'}
+
+function rCards(){var el=document.getElementById('cf'),items=fil();if(!items.length){el.innerHTML='<div class="emp"><h3>Пусто</h3><p>Нажми + внизу</p></div>';return}if(proj!=='all'){var u=items.filter(function(t){return!t.done}),d=items.filter(function(t){return t.done}),h='';u.forEach(function(t){h+=cH(t)});if(d.length){h+='<div class="sh">Готово · '+d.length+'<button onclick="tglShow()">'+(showDone?'скрыть':'показать')+'</button></div>';if(showDone)d.forEach(function(t){h+=cH(t)})}el.innerHTML=h;el.querySelectorAll('.cc').forEach(function(c){swipe(c)});return}var gr=grouped(items),h='';gr.forEach(function(g){if(!g.un.length&&!showDone)return;h+=secH(g.name,g.un.length);g.un.forEach(function(t){h+=cH(t)});if(g.dn.length&&showDone)g.dn.forEach(function(t){h+=cH(t)})});el.innerHTML=h;el.querySelectorAll('.cc').forEach(function(c){swipe(c)});el.querySelectorAll('.sec-name').forEach(function(n){bindRename(n)})}
+
+function rList(){var el=document.getElementById('ls'),items=fil();if(!items.length){el.innerHTML='<div class="emp"><h3>Пусто</h3><p>Печатай вверху</p></div>';return}if(proj!=='all'){var u=items.filter(function(t){return!t.done}),d=items.filter(function(t){return t.done}),h='';u.forEach(function(t){h+=lH(t)});if(d.length){h+='<div class="sh">Готово · '+d.length+'<button onclick="tglShow()">'+(showDone?'скрыть':'показать')+'</button></div>';if(showDone)d.forEach(function(t){h+=lH(t)})}el.innerHTML=h;initDrag(el);return}var gr=grouped(items),h='';gr.forEach(function(g){if(!g.un.length&&!showDone)return;h+=secH(g.name,g.un.length);g.un.forEach(function(t){h+=lH(t)});if(g.dn.length&&showDone)g.dn.forEach(function(t){h+=lH(t)})});el.innerHTML=h;el.querySelectorAll('.sec-name').forEach(function(n){bindRename(n)});initDrag(el)}
+
+// ═══════════════════════════════════════════════════════════════
+// 12. SWIPE & DRAG
+// ═══════════════════════════════════════════════════════════════
+
+function swipe(card){var sx=0,cx=0,sy=0,active=false,dir=null,THR=80;card.addEventListener('touchstart',function(e){var t=e.touches[0];sx=t.clientX;sy=t.clientY;cx=0;active=true;dir=null;card.style.transition='none'},{passive:true});card.addEventListener('touchmove',function(e){if(!active)return;var t=e.touches[0],dx=t.clientX-sx,dy=t.clientY-sy;if(dir===null){if(Math.abs(dx)>8)dir='h';else if(Math.abs(dy)>8){dir='v';active=false;return}else return}if(dir!=='h')return;e.preventDefault();cx=dx;card.style.transform='translateX('+(dx*.55)+'px)';var p=Math.min(Math.abs(dx)/THR,1),sl=card.querySelector('.sl'),sr=card.querySelector('.sr');if(dx>10){sl.style.opacity=p;sr.style.opacity=0}else if(dx<-10){sr.style.opacity=p;sl.style.opacity=0}else{sl.style.opacity=0;sr.style.opacity=0}},{passive:false});card.addEventListener('touchend',function(){if(!active)return;active=false;var sl=card.querySelector('.sl'),sr=card.querySelector('.sr');if(sl)sl.style.opacity=0;if(sr)sr.style.opacity=0;var id=card.dataset.id;if(cx>THR){card.style.transition='transform .2s,opacity .2s';card.style.transform='translateX(110%)';card.style.opacity='0';setTimeout(function(){card.style.maxHeight='0';card.style.margin='0';card.style.padding='0';card.style.overflow='hidden';card.style.transition='all .15s';setTimeout(function(){tglDone(id)},150)},200)}else if(cx<-THR){card.style.transition='transform .2s,opacity .2s';card.style.transform='translateX(-110%)';card.style.opacity='0';setTimeout(function(){card.style.maxHeight='0';card.style.margin='0';card.style.padding='0';card.style.overflow='hidden';card.style.transition='all .15s';setTimeout(function(){delTask(id)},150)},200)}else{card.style.transition='transform .15s';card.style.transform=''}})}
+
+function initDrag(ct){var dragEl=null,startY=0;ct.querySelectorAll('.ldh').forEach(function(h){h.addEventListener('touchstart',function(e){e.stopPropagation();dragEl=h.closest('.li');if(!dragEl)return;startY=e.touches[0].clientY;dragEl.classList.add('dragging')},{passive:true})});ct.addEventListener('touchmove',function(e){if(!dragEl)return;e.preventDefault();dragEl.style.transform='translateY('+(e.touches[0].clientY-startY)+'px)';dragEl.style.zIndex='100'},{passive:false});ct.addEventListener('touchend',function(){if(!dragEl)return;var rect=dragEl.getBoundingClientRect(),mid=rect.top+rect.height/2;var items=[].slice.call(ct.querySelectorAll('.li'));var srcId=dragEl.dataset.id,srcIdx=T.findIndex(function(t){return t.id===srcId}),bestIdx=-1,bestDist=9999;items.forEach(function(it){if(it===dragEl)return;var r=it.getBoundingClientRect(),m=r.top+r.height/2,d=Math.abs(mid-m);if(d<bestDist){bestDist=d;bestIdx=T.findIndex(function(t){return t.id===it.dataset.id});if(mid>m)bestIdx++}});if(srcIdx>=0&&bestIdx>=0&&srcIdx!==bestIdx){var item=T.splice(srcIdx,1)[0];if(bestIdx>srcIdx)bestIdx--;T.splice(bestIdx,0,item);saveAll()}dragEl.style.transform='';dragEl.style.zIndex='';dragEl.classList.remove('dragging');dragEl=null;renderAll()})}
+
+function bindRename(el){el.addEventListener('blur',function(){var orig=el.dataset.orig,nn=el.textContent.trim();if(!nn||nn===orig)return;var p=P.find(function(x){return x.name===orig});if(!p)return;p.name=nn;T.forEach(function(t){if(t.project===orig)t.project=nn});if(proj===orig){proj=nn;sv()}saveAll();toast('✎ '+nn);renderAll()});el.addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();el.blur()}})}
+
+// ═══════════════════════════════════════════════════════════════
+// 13. TASK ACTIONS
+// ═══════════════════════════════════════════════════════════════
+
+function toggleQA(){qaOpen=!qaOpen;var qa=document.getElementById('qadd');var inp=document.getElementById('qa-in');qa.classList.toggle('on',qaOpen);if(qaOpen){inp.value='';inp.focus();inp.click();setTimeout(function(){inp.focus()},50);setTimeout(function(){inp.focus()},150)}}
+document.getElementById('qa-in').addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();addInput(e.target)}});
+document.getElementById('li-in').addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();addInput(e.target)}});
+
+function addInput(inp){var v=inp.value.trim();if(!v)return;var t=parseLine(v);T.push(t);saveAll();inp.value='';renderAll();toast('+ '+t.text.slice(0,25))}
+
+function parseNotes(){var ta=document.getElementById('ne'),lines=ta.value.split('\n').map(function(l){return l.trim()}).filter(Boolean);if(!lines.length){toast('Напиши задачи');return}var c=0;lines.forEach(function(l){T.push(parseLine(l));c++});saveAll();ta.value='';notesText='';saveAll();toast(c+' задач');setView('tasks')}
+
+function parseLine(raw){var pri='medium',text=raw;if(text.indexOf('!!! ')===0){pri='high';text=text.slice(4)}else if(text.indexOf('!! ')===0){pri='medium';text=text.slice(3)}else if(text.indexOf('! ')===0){pri='low';text=text.slice(2)}var project=proj!=='all'?proj:(P.length?P[0].name:'');var pm=text.match(/#([а-яА-ЯёЁa-zA-Z0-9\-]+)/);if(pm){var tag=pm[1].toLowerCase();var found=P.find(function(p){return p.name.toLowerCase().indexOf(tag)>=0});if(found)project=found.name;text=text.replace(pm[0],'').trim()}return{id:'t'+Date.now()+Math.random().toString(36).slice(2,6),text:text,project:project,pri:pri,done:false,ts:Date.now(),by:userName}}
+
+function setView(v){view=v;sv();document.querySelectorAll('.vb').forEach(function(b){b.classList.toggle('on',b.dataset.v===v)});var isTasks=v==='tasks';document.getElementById('v-cards').classList.toggle('on',isTasks&&sub==='cards');document.getElementById('v-list').classList.toggle('on',isTasks&&sub==='list');document.getElementById('v-notes').classList.toggle('on',v==='notes');document.getElementById('v-ritual').classList.toggle('on',v==='ritual');document.getElementById('v-personal').classList.toggle('on',isTasks&&sub==='personal');document.getElementById('proj-bar').style.display=(v==='ritual'||v==='notes')?'none':'';if(isTasks&&sub==='personal')document.getElementById('proj-bar').style.display='none';document.getElementById('tsrch').style.display=(v==='tasks')?'':'none';document.getElementById('sub-bar').style.display=isTasks?'':'none';if(!isTasks||sub!=='cards'){qaOpen=false;document.getElementById('qadd').classList.remove('on')}if(v==='ritual'){rRitual()}else if(v==='personal'){rPersonal()}else if(v==='notes'){document.getElementById('ne').value=notesText}else if(v==='tasks'&&sub==='personal'){rPersonal()}else{renderAll()}if(isTasks&&sub==='list')mFocus('li-in');if(v==='notes')mFocus('ne');if(isTasks&&sub==='personal')mFocus('pv-in')}
+
+function setSub(s){sub=s;sv();document.querySelectorAll('.sub').forEach(function(b){b.classList.toggle('on',b.dataset.s===s)});document.getElementById('v-cards').classList.toggle('on',s==='cards');document.getElementById('v-list').classList.toggle('on',s==='list');document.getElementById('v-personal').classList.toggle('on',s==='personal');if(s!=='cards'){qaOpen=false;document.getElementById('qadd').classList.remove('on')}if(s==='personal'){document.getElementById('proj-bar').style.display='none';rPersonal()}else{document.getElementById('proj-bar').style.display=''}if(s==='personal')mFocus('pv-in');else if(s==='list')mFocus('li-in');else renderAll()}
+function mFocus(id){setTimeout(function(){var el=document.getElementById(id);if(el){el.focus();el.click()}},150)}
+function tglShow(){showDone=!showDone;renderAll()}
+function tglDone(id){var t=T.find(function(x){return x.id===id});if(!t)return;t.done=!t.done;saveAll();toast(t.done?'✓':'↩');renderAll()}
+function delTask(id){var i=T.findIndex(function(x){return x.id===id});if(i<0)return;lastDel={task:T[i],idx:i};T.splice(i,1);saveAll();toast('Удалено',true);renderAll()}
+function undoDel(){if(!lastDel)return;T.splice(lastDel.idx,0,lastDel.task);saveAll();lastDel=null;hideToast();renderAll()}
+function onEdit(el){var id=el.dataset.id,text=el.textContent.trim();var t=T.find(function(x){return x.id===id});if(!t)return;if(!text){delTask(id);return}t.text=text;saveAll()}
+
+function toggleDD(){ddOpen=!ddOpen;document.getElementById('proj-btn').classList.toggle('open',ddOpen);document.getElementById('proj-dd').classList.toggle('open',ddOpen);if(ddOpen){document.getElementById('proj-si').value='';rDD();setTimeout(function(){document.getElementById('proj-si').focus()},100);setTimeout(function(){document.addEventListener('click',closeDDOut)},10)}else document.removeEventListener('click',closeDDOut)}
+function closeDDOut(e){if(!document.getElementById('proj-bar').contains(e.target))closeDD()}
+function closeDD(){ddOpen=false;document.getElementById('proj-btn').classList.remove('open');document.getElementById('proj-dd').classList.remove('open');document.removeEventListener('click',closeDDOut)}
+function filterDD(q){rDD(q)}
+function selProj(n){proj=n;sv();closeDD();renderAll()}
+
+function openSheet(){var sht=document.getElementById('sht');if(window.innerWidth>=600){var main=document.querySelector('.app-main');var r=main.getBoundingClientRect();sht.style.left=r.left+'px';sht.style.right=(window.innerWidth-r.right)+'px';sht.style.maxWidth='none'}else{sht.style.left='';sht.style.right='';sht.style.maxWidth='480px'}document.getElementById('ov').classList.add('on');sht.classList.add('on');setTimeout(function(){document.getElementById('sh-n').focus()},300)}
+function closeSheet(){document.getElementById('ov').classList.remove('on');document.getElementById('sht').classList.remove('on');var sht=document.getElementById('sht');sht.style.left='';sht.style.right='';sht.style.maxWidth=''}
+function addProj(){var n=document.getElementById('sh-n').value.trim();if(!n)return;if(P.find(function(p){return p.name===n})){toast('Уже есть');return}P.push({name:n,idx:P.length});saveAll();document.getElementById('sh-n').value='';closeSheet();renderAll();toast('+ '+n)}
+
+function toggleSearch(){var w=document.getElementById('tsrch'),i=document.getElementById('tsrch-i');if(w.classList.contains('on')){w.classList.remove('on');taskQ='';i.value='';renderAll()}else{w.classList.add('on');i.focus()}}
+function onSearch(q){taskQ=q;renderAll()}
+
+// ═══════════════════════════════════════════════════════════════
+// 14. EXPORT / IMPORT
+// ═══════════════════════════════════════════════════════════════
+
+function doExport(){var groups={};T.forEach(function(t){if(!groups[t.project])groups[t.project]=[];groups[t.project].push(t)});var text='Surf · '+userName+'\n\n';Object.keys(groups).sort().forEach(function(p){text+=p+'\n';groups[p].forEach(function(t){text+='  '+(t.done?'✓':'○')+' '+t.text+'\n'});text+='\n'});if(navigator.share)navigator.share({text:text}).catch(function(){});else{var b=new Blob([text],{type:'text/plain'}),u=URL.createObjectURL(b),a=document.createElement('a');a.href=u;a.download='surf.txt';a.click();URL.revokeObjectURL(u)}toast('📦')}
+
+function doExportJSON(){var data={tasks:T,projects:P,ritual:R,notes:notesText,personalTasks:PT,user:userName,mode:appMode,room:roomCode,exportDate:new Date().toISOString()};var b=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});var u=URL.createObjectURL(b);var a=document.createElement('a');a.href=u;a.download='surf-backup.json';a.click();URL.revokeObjectURL(u);toast('💾 JSON')}
+
+function doImportJSON(){document.getElementById('imp-file').click()}
+document.getElementById('imp-file').addEventListener('change',function(e){var file=e.target.files[0];if(!file)return;var reader=new FileReader();reader.onload=function(ev){try{var data=JSON.parse(ev.target.result);if(data.tasks)T=data.tasks;if(data.projects)P=data.projects;if(data.ritual)R=data.ritual;if(typeof data.notes==='string')notesText=data.notes;if(data.personalTasks)PT=data.personalTasks;saveAll();toast('📥 Импортировано');setView(view)}catch(err){toast('Ошибка формата')}};reader.readAsText(file);e.target.value=''});
+
+// ═══════════════════════════════════════════════════════════════
+// 15. MENU ACTIONS (Firebase)
+// ═══════════════════════════════════════════════════════════════
+
+function doSync() {
+    if (!fbEnabled) { toast('Firebase не подключен'); return; }
+    loadFromFirebase();
+}
+
+function doForceLoad() {
+    if (!fbEnabled) { toast('Firebase не подключен'); return; }
+    if (!confirm('Загрузить всё из облака? Локальные данные будут перезаписаны.')) return;
+    T=[]; P=[]; R={morning:[],evening:[],checks:{},lastReset:''}; notesText=''; PT=[];
+    saveLocal();
+    window._fbLoadRunning = false;
+    fbSyncInProgress = false;
+    loadFromFirebase();
+    toast('⬇️ Загрузка из облака...');
+}
+
+function doShowStatus() {
+    alert([
+        'Firebase: ' + (fbEnabled ? '✅ Подключен' : '❌ Не подключен'),
+        'Режим: ' + (appMode === 'shared' ? 'Совместный' : 'Личный'),
+        'Пользователь: ' + userName,
+        'ID: ' + userId,
+        appMode === 'shared' ? 'Комната: ' + roomCode : '',
+        'Auth UID: ' + (fbUser ? fbUser.uid.substring(0, 8) + '...' : 'нет')
+    ].filter(Boolean).join('\n'));
+}
+
+function doLogout() {
+    if (!confirm('Выйти из аккаунта?')) return;
+    if (fbUnsubscribe) fbUnsubscribe();
+    localStorage.removeItem(APP_NAME + '_lastMode');
+    localStorage.removeItem(APP_NAME + '_lastUser');
+    localStorage.removeItem(APP_NAME + '_lastUserId');
+    localStorage.removeItem(APP_NAME + '_lastRoom');
+    location.reload();
+}
+
+function toggleMenu(){var m=document.getElementById('menu-dd');m.classList.toggle('open');if(m.classList.contains('open'))setTimeout(function(){document.addEventListener('click',closeMenuOut)},10);else document.removeEventListener('click',closeMenuOut)}
+function closeMenuOut(e){if(!document.getElementById('menu-dd').contains(e.target)){document.getElementById('menu-dd').classList.remove('open');document.removeEventListener('click',closeMenuOut)}}
+
+var tt;function toast(m,u){var e=document.getElementById('tst');e.innerHTML=m+(u?' <a onclick="undoDel()">Отменить</a>':'');e.classList.add('show');clearTimeout(tt);tt=setTimeout(hideToast,u?4000:1200)}
+function hideToast(){document.getElementById('tst').classList.remove('show')}
+
+// ═══════════════════════════════════════════════════════════════
+// 16. PERSONAL TASKS
+// ═══════════════════════════════════════════════════════════════
+
+document.getElementById('pv-in').addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();addPersonal(e.target)}});
+function addPersonal(inp){var v=inp.value.trim();if(!v)return;PT.push({id:'p'+Date.now()+Math.random().toString(36).slice(2,5),text:v,done:false,ts:Date.now()});saveAll();inp.value='';rPersonal();toast('+ '+v.slice(0,25))}
+function rPersonal(){var el=document.getElementById('pv-list');var active=PT.filter(function(t){return!t.done});var done=PT.filter(function(t){return t.done});document.getElementById('pv-cnt').textContent=active.length+' активных';if(!PT.length){el.innerHTML='<div class="emp"><h3>Пусто</h3><p>Добавь личную задачу</p></div>';return}var h='';active.forEach(function(t){h+=pLH(t)});if(done.length){h+='<div class="sh">Готово · '+done.length+'<button onclick="tglShowP()">'+(showDoneP?'скрыть':'показать')+'</button></div>';if(showDoneP)done.forEach(function(t){h+=pLH(t)})}el.innerHTML=h}
+var showDoneP=true;
+function tglShowP(){showDoneP=!showDoneP;rPersonal()}
+function pLH(t){return'<div class="li '+(t.done?'dn':'')+'" data-pid="'+t.id+'"><div class="lk" onclick="event.stopPropagation();tglDoneP(\''+t.id+'\')">'+CHK+'</div><div class="lt" contenteditable="'+(t.done?'false':'true')+'" data-pid="'+t.id+'" onblur="onEditP(this)" onkeydown="if(event.key===\'Enter\'){event.preventDefault();this.blur()}">'+esc(t.text)+'</div><div class="ldel" onclick="event.stopPropagation();delPersonal(\''+t.id+'\')" title="Удалить">'+XS+'</div></div>'}
+function tglDoneP(id){var t=PT.find(function(x){return x.id===id});if(!t)return;t.done=!t.done;saveAll();toast(t.done?'✓':'↩');rPersonal()}
+function delPersonal(id){var i=PT.findIndex(function(x){return x.id===id});if(i<0)return;PT.splice(i,1);saveAll();toast('Удалено');rPersonal()}
+function onEditP(el){var id=el.dataset.pid,text=el.textContent.trim();var t=PT.find(function(x){return x.id===id});if(!t)return;if(!text){delPersonal(id);return}t.text=text;saveAll()}
+
+// ═══════════════════════════════════════════════════════════════
+// 17. RITUAL
+// ═══════════════════════════════════════════════════════════════
+
+function checkReset(){var now=new Date(),h=now.getHours(),today=now.toISOString().slice(0,10);var resetDay=h<6?new Date(now.getTime()-86400000).toISOString().slice(0,10):today;if(R.lastReset!==resetDay){R.checks={};R.lastReset=resetDay;saveAll()}}
+function rTotal(){var done=0,total=0;RBLOCKS.forEach(function(b){var items=R[b.key]||[];total+=items.length;items.forEach(function(it){if(R.checks[it.id])done++})});return{done:done,total:total}}
+function rRitual(){var el=document.getElementById('rf');checkReset();var st=rTotal();var pct=st.total?Math.round(st.done/st.total*100):0;var h='<div class="r-prog"><div class="r-bar"><div class="r-bar-fill" style="width:'+pct+'%"></div></div><div class="r-cnt">'+st.done+'/'+st.total+'</div></div>';RBLOCKS.forEach(function(b){var items=R[b.key]||[];var bc=0;items.forEach(function(it){if(R.checks[it.id])bc++});h+='<div class="r-sec"><div class="r-sec-hdr">'+b.label+'<span class="r-sec-cnt">'+bc+'/'+items.length+'</span></div>';items.forEach(function(it){var ck=R.checks[it.id]?true:false;h+='<div class="r-item'+(ck?' checked':'')+'" data-rid="'+it.id+'"><div class="r-chk'+(ck?' on':'')+'" onclick="event.stopPropagation();tglR(\''+it.id+'\')" ontouchend="event.stopPropagation();event.preventDefault();tglR(\''+it.id+'\')">'+CHK+'</div><div class="r-txt" contenteditable="true" data-rid="'+it.id+'" data-block="'+b.key+'" onblur="editR(this)" onkeydown="if(event.key===\'Enter\'){event.preventDefault();this.blur()}">'+esc(it.text)+'</div><div class="r-del" onclick="delR(\''+b.key+'\',\''+it.id+'\')">'+XS+'</div></div>'});h+='<div class="r-add" onclick="addR(\''+b.key+'\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Добавить</div></div>'});el.innerHTML=h}
+function tglR(id){R.checks[id]=!R.checks[id];saveAll();rRitual()}
+function addR(block){if(!R[block])R[block]=[];var id='r'+Date.now()+Math.random().toString(36).slice(2,5);R[block].push({id:id,text:''});saveAll();rRitual();setTimeout(function(){var el=document.querySelector('.r-txt[data-rid="'+id+'"]');if(el){el.focus()}},50)}
+function editR(el){var id=el.dataset.rid,block=el.dataset.block,text=el.textContent.trim();var items=R[block]||[];var it=items.find(function(x){return x.id===id});if(!it)return;if(!text){delR(block,id);return}it.text=text;saveAll()}
+function delR(block,id){R[block]=(R[block]||[]).filter(function(x){return x.id!==id});delete R.checks[id];saveAll();rRitual();toast('Удалено')}
+
+// ═══════════════════════════════════════════════════════════════
+// 18. SIDEBAR
+// ═══════════════════════════════════════════════════════════════
+
+var sbOpen=false;
+function openSB(){sbOpen=true;document.getElementById('sb').classList.add('on');document.getElementById('sb-ov').classList.add('on');rSB()}
+function closeSB(){sbOpen=false;document.getElementById('sb').classList.remove('on');document.getElementById('sb-ov').classList.remove('on')}
+function rSB(){var el=document.getElementById('sb-list');var allCnt=T.filter(function(t){return!t.done}).length;var h='<div class="sb-item'+(proj==='all'?' on':'')+'" onclick="sbPick(\'all\')"><div class="sb-dot" style="background:var(--text)"></div><span class="sb-name" style="font-weight:600">Все проекты</span><span class="sb-cnt">'+allCnt+'</span></div>';P.forEach(function(p,i){var cnt=T.filter(function(t){return t.project===p.name&&!t.done}).length;var en=esc(p.name).replace(/'/g,"\\'");h+='<div class="sb-item'+(proj===p.name?' on':'')+'" onclick="sbPick(\''+en+'\')"><div class="sb-dot" style="background:'+pC(i)+'"></div><span class="sb-name">'+esc(p.name)+'</span><span class="sb-cnt">'+(cnt||'')+'</span></div>'});el.innerHTML=h}
+function sbPick(n){proj=n;sv();if(window.innerWidth<600)closeSB();renderAll()}
+
+// Swipe to open sidebar
+(function(){var sx=0,sy=0,tracking=false,moved=false;document.addEventListener('touchstart',function(e){if(window.innerWidth<600)return;if(sbOpen)return;var t=e.touches[0];if(t.clientX<20){sx=t.clientX;sy=t.clientY;tracking=true;moved=false}},{passive:true});document.addEventListener('touchmove',function(e){if(!tracking)return;var t=e.touches[0],dx=t.clientX-sx,dy=t.clientY-sy;if(!moved&&Math.abs(dx)>10&&Math.abs(dx)>Math.abs(dy)){moved=true}if(moved){var sb=document.getElementById('sb');sb.style.transition='none';sb.style.transform='translateX('+Math.min(0,dx-260)+'px)'}},{passive:true});document.addEventListener('touchend',function(e){if(!tracking)return;tracking=false;var sb=document.getElementById('sb');sb.style.transition='';if(moved){var t=e.changedTouches[0],dx=t.clientX-sx;if(dx>80){openSB()}else{sb.style.transform=''}}moved=false})})();
+
+// ═══════════════════════════════════════════════════════════════
+// 19. ЗАПУСК
+// ═══════════════════════════════════════════════════════════════
+
+// Dark mode для логин-экрана тоже
+darkMode = localStorage.getItem('s7dark') === '1';
+applyDark();
+
+// Пробуем автовход
+if (!tryLocalAutoLogin()) {
+    // Экран входа уже виден
+}
+
+// GitHub Pages диагностика
+if (location.hostname.includes('github.io')) {
+    console.log('📍 GitHub Pages detected:', location.pathname);
+}
+
+// Service Worker регистрация (пути ОТНОСИТЕЛЬНЫЕ — урок из инструкции)
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw.js')
+        .then(function(reg) { console.log('📦 SW registered'); })
+        .catch(function(err) { console.log('SW error:', err); });
+}
+</script>
+</body>
+</html>
