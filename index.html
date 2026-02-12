@@ -256,7 +256,7 @@ html.dark .bot{background:rgba(26,26,29,.92);border-top-color:rgba(255,255,255,.
 <div class="hdr-r"><button class="hb hb-menu" onclick="togglePtabs()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button><div class="logo">Sur<b>f</b> <div class="fb-dot" id="fbDot" title="Firebase статус"></div></div><div class="hdr-tabs"><button class="vb on" data-v="tasks" onclick="setView('tasks')">Задачи</button><button class="vb" data-v="notes" onclick="setView('notes')">Заметки</button><button class="vb" data-v="ritual" onclick="setView('ritual')">Ритуал</button></div><div class="hdr-b"><button class="hb" onclick="toggleSearch()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.35-4.35"/></svg></button><button class="hb" onclick="toggleMenu()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg></button></div></div>
 <div class="menu-dd" id="menu-dd">
 <div class="menu-item" id="dm-toggle" onclick="toggleDark();toggleMenu()">🌙 Ночной режим</div>
-<div class="menu-item" onclick="doSync();toggleMenu()">☁️ Синхронизация</div>
+<div class="menu-item" onclick="doPush();toggleMenu()">☁️ Отправить в облако</div>
 <div class="menu-item" onclick="doForceLoad();toggleMenu()">⬇️ Загрузить из облака</div>
 <div class="menu-item" onclick="doShowStatus();toggleMenu()">📡 Статус Firebase</div>
 <div class="menu-item" onclick="doExport();toggleMenu()">📤 Экспорт текст</div>
@@ -416,6 +416,13 @@ function updateFbDot(state) {
 
 async function saveToFirebase() {
     if (!fbEnabled || fbSyncInProgress) return;
+
+    // ЗАЩИТА: никогда не перезаписывать облако пустыми данными
+    if (!T.length && !P.length && !PT.length && !notesText) {
+        console.log('⚠️ Skip save: all data empty');
+        return;
+    }
+
     fbSyncInProgress = true;
     updateFbDot('syncing');
 
@@ -444,9 +451,9 @@ async function saveToFirebase() {
         console.log('☁️ Saved to Firebase');
         updateFbDot('online');
     } catch (err) {
-        console.error('❌ Save:', err);
+        console.error('❌ Save:', err.code, err.message);
         updateFbDot('offline');
-        toast('Ошибка сохранения ☁️');
+        toast('Ошибка: ' + (err.code || err.message || 'сохранение'));
     } finally {
         fbSyncInProgress = false;
     }
@@ -471,23 +478,37 @@ async function loadFromFirebase() {
         var doc = await getDocRef().get();
         if (doc.exists && doc.data().data) {
             var remote = JSON.parse(doc.data().data);
-            applyRemoteData(remote);
-            saveLocal();
-            renderAll();
+            // Облако непустое — проверяем что есть хоть задачи или проекты
+            var hasRemoteData = (remote.tasks && remote.tasks.length) || (remote.projects && remote.projects.length);
+            var hasLocalData = T.length || P.length;
+
+            if (hasRemoteData) {
+                applyRemoteData(remote);
+                saveLocal();
+                renderAll();
+                toast('☁️ Данные загружены');
+            } else if (hasLocalData) {
+                // В облаке пусто, локально есть — отправляем в облако
+                saveToFirebase();
+            }
             updateFbDot('online');
-            toast('☁️ Данные загружены');
 
             if (appMode === 'shared' && doc.data().users) {
                 renderUsersOnline(doc.data().users);
             }
-        } else {
-            // Нет данных в облаке — создаём документ из локальных
+        } else if (T.length || P.length) {
+            // Документа нет в облаке, но есть локальные данные — сохраняем
+            console.log('☁️ No cloud data, uploading local...');
             saveToFirebase();
+            updateFbDot('online');
+        } else {
+            // Ни в облаке ни локально ничего нет
             updateFbDot('online');
         }
     } catch (err) {
         console.error('❌ Load:', err);
         updateFbDot('offline');
+        toast('Ошибка загрузки из облака');
     } finally {
         fbSyncInProgress = false;
         window._fbLoadRunning = false;
@@ -801,30 +822,63 @@ document.getElementById('imp-file').addEventListener('change',function(e){var fi
 // 15. MENU ACTIONS (Firebase)
 // ═══════════════════════════════════════════════════════════════
 
-function doSync() {
+async function doPush() {
     if (!fbEnabled) { toast('Firebase не подключен'); return; }
-    loadFromFirebase();
+    if (!T.length && !P.length) { toast('Нет данных для отправки'); return; }
+    
+    fbSyncInProgress = false; // сбрасываем флаг
+    toast('☁️ Отправляю...');
+    
+    try {
+        await saveToFirebase();
+        toast('✅ Отправлено в облако! (' + T.length + ' задач)');
+    } catch(err) {
+        toast('❌ Ошибка: ' + (err.code || err.message));
+    }
 }
 
-function doForceLoad() {
+async function doForceLoad() {
     if (!fbEnabled) { toast('Firebase не подключен'); return; }
     if (!confirm('Загрузить всё из облака? Локальные данные будут перезаписаны.')) return;
-    T=[]; P=[]; R={morning:[],evening:[],checks:{},lastReset:''}; notesText=''; PT=[];
-    saveLocal();
-    window._fbLoadRunning = false;
-    fbSyncInProgress = false;
-    loadFromFirebase();
-    toast('⬇️ Загрузка из облака...');
+
+    // СНАЧАЛА пробуем загрузить, НЕ стирая локальное!
+    updateFbDot('syncing');
+    toast('⬇️ Загрузка...');
+
+    try {
+        var doc = await getDocRef().get();
+        if (doc.exists && doc.data().data) {
+            var remote = JSON.parse(doc.data().data);
+            // Только если облако ответило — заменяем данные
+            applyRemoteData(remote);
+            saveLocal();
+            renderAll();
+            updateFbDot('online');
+            toast('☁️ Загружено из облака!');
+        } else {
+            toast('В облаке пусто — ничего не изменено');
+            updateFbDot('online');
+        }
+    } catch (err) {
+        console.error('❌ Force load:', err);
+        toast('Ошибка загрузки — данные не тронуты');
+        updateFbDot('offline');
+    }
 }
 
 function doShowStatus() {
+    var docPath = appMode === 'shared' 
+        ? 'apps/' + APP_NAME + '/rooms/' + roomCode
+        : 'apps/' + APP_NAME + '/users/' + userId;
     alert([
         'Firebase: ' + (fbEnabled ? '✅ Подключен' : '❌ Не подключен'),
         'Режим: ' + (appMode === 'shared' ? 'Совместный' : 'Личный'),
         'Пользователь: ' + userName,
         'ID: ' + userId,
         appMode === 'shared' ? 'Комната: ' + roomCode : '',
-        'Auth UID: ' + (fbUser ? fbUser.uid.substring(0, 8) + '...' : 'нет')
+        'Auth UID: ' + (fbUser ? fbUser.uid.substring(0, 8) + '...' : 'нет'),
+        'Путь: ' + docPath,
+        'Задач: ' + T.length + ' | Проектов: ' + P.length
     ].filter(Boolean).join('\n'));
 }
 
