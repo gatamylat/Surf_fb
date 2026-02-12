@@ -1,7 +1,7 @@
 // Surf Service Worker — network-first (из уроков Firebase_Instruction_v2)
 // ВАЖНО: при каждом обновлении кода менять CACHE_NAME!
 
-const CACHE_NAME = 'surf-v1';
+const CACHE_NAME = 'surf-v2';
 const URLS_TO_CACHE = [
     './',
     './index.html',
