@@ -305,6 +305,10 @@ let fbEnabled = false;
 let fbSyncInProgress = false;
 let fbUnsubscribe = null;
 
+// ═══ НОВОЕ: защита от затирания данных на нескольких устройствах ═══
+let _lastSyncTimestamp = 0;   // Время нашей последней записи (для отсечения onSnapshot)
+let _saveDebounceTimer = null; // Таймер debounce для saveToFirebase
+
 // Auth
 let appMode = null;      // 'personal' | 'shared'
 let userName = '';
@@ -448,6 +452,8 @@ async function saveToFirebase() {
         }
 
         await getDocRef().set(payload, { merge: true });
+        // ═══ НОВОЕ: запоминаем время записи для отсечения onSnapshot ═══
+        _lastSyncTimestamp = Date.now();
         console.log('☁️ Saved to Firebase');
         updateFbDot('online');
     } catch (err) {
@@ -528,7 +534,10 @@ function applyRemoteData(remote) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// 7. FIREBASE — realtime (для совместного режима)
+// 7. FIREBASE — realtime (ВСЕ режимы, не только shared!)
+//    Урок: 1 человек на 3 устройствах = многопользовательский сценарий
+//    Отсечение собственных записей — по _lastSyncTimestamp (не по имени,
+//    потому что имя одинаковое на всех устройствах в personal режиме)
 // ═══════════════════════════════════════════════════════════════
 
 function startRealtimeSync() {
@@ -539,14 +548,28 @@ function startRealtimeSync() {
         if (!doc.exists || fbSyncInProgress) return;
 
         var remoteData = doc.data();
-        if (remoteData.updatedBy === userName) return;
+
+        // ═══ НОВОЕ: отсечение по timestamp вместо userName ═══
+        // В personal режиме имя одинаковое на всех устройствах,
+        // поэтому проверка updatedBy === userName не работает.
+        // Вместо этого: если наша последняя запись была < 3 сек назад,
+        // значит это наш же onSnapshot-отклик — пропускаем.
+        if (_lastSyncTimestamp && (Date.now() - _lastSyncTimestamp) < 3000) {
+            return;
+        }
 
         try {
             var parsed = JSON.parse(remoteData.data);
             applyRemoteData(parsed);
             saveLocal();
             renderAll();
-            toast(remoteData.updatedBy + ' обновил(а) данные');
+
+            // ═══ НОВОЕ: разные тосты для shared vs personal ═══
+            if (appMode === 'shared' && remoteData.updatedBy && remoteData.updatedBy !== userName) {
+                toast(remoteData.updatedBy + ' обновил(а) данные');
+            } else if (appMode === 'personal') {
+                toast('📥 Обновлено с другого устройства');
+            }
 
             if (remoteData.users) {
                 renderUsersOnline(remoteData.users);
@@ -597,10 +620,18 @@ function loadLocal() {
     } catch(e) {}
 }
 
-// Общая функция: local + cloud
+// ═══ НОВОЕ: saveAll с debounce 2 секунды ═══
+// Локальное сохранение — мгновенно (чтобы ничего не потерять).
+// Облачное — через 2 секунды после последнего изменения.
+// Это снижает конфликты при быстром вводе и при работе на нескольких устройствах.
 function saveAll() {
     saveLocal();
-    if (fbEnabled) saveToFirebase();
+
+    // Debounce: ждём 2 секунды после последнего изменения
+    if (_saveDebounceTimer) clearTimeout(_saveDebounceTimer);
+    _saveDebounceTimer = setTimeout(function() {
+        if (fbEnabled) saveToFirebase();
+    }, 2000);
 }
 
 function saveNotes() {
@@ -703,14 +734,15 @@ function startApp() {
     // Firebase
     initFirebase();
 
-    // Realtime для совместного
-    if (appMode === 'shared') {
-        setTimeout(function() {
-            startRealtimeSync();
+    // ═══ НОВОЕ: realtime для ВСЕХ режимов, не только shared ═══
+    // 1 человек на 3 устройствах — это уже многопользовательский сценарий
+    setTimeout(function() {
+        startRealtimeSync();
+        if (appMode === 'shared') {
             toast('Комната: ' + roomCode);
-        }, 2000);
-        document.getElementById('usersOnline').classList.remove('hidden');
-    }
+            document.getElementById('usersOnline').classList.remove('hidden');
+        }
+    }, 2000);
 
     console.log('🚀 ' + APP_NAME + ' | ' + appMode + ' | user: ' + userName + ' | id: ' + userId);
 }
@@ -827,6 +859,8 @@ async function doPush() {
     if (!T.length && !P.length) { toast('Нет данных для отправки'); return; }
     
     fbSyncInProgress = false; // сбрасываем флаг
+    // ═══ Отменяем debounce и отправляем немедленно ═══
+    if (_saveDebounceTimer) clearTimeout(_saveDebounceTimer);
     toast('☁️ Отправляю...');
     
     try {
@@ -878,7 +912,9 @@ function doShowStatus() {
         appMode === 'shared' ? 'Комната: ' + roomCode : '',
         'Auth UID: ' + (fbUser ? fbUser.uid.substring(0, 8) + '...' : 'нет'),
         'Путь: ' + docPath,
-        'Задач: ' + T.length + ' | Проектов: ' + P.length
+        'Задач: ' + T.length + ' | Проектов: ' + P.length,
+        'Realtime: ✅ (все режимы)',
+        'Debounce: 2 сек'
     ].filter(Boolean).join('\n'));
 }
 
