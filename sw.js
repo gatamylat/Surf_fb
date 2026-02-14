@@ -1,7 +1,7 @@
 // Surf Service Worker — network-first
 // ВАЖНО: при каждом обновлении кода менять CACHE_NAME!
 
-const CACHE_NAME = 'surf-v4';
+const CACHE_NAME = 'surf-v5';
 const URLS_TO_CACHE = [
     './',
     './index.html',
