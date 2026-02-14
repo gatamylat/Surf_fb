@@ -1,14 +1,13 @@
-// Surf Service Worker — network-first (из уроков Firebase_Instruction_v2)
+// Surf Service Worker — network-first
 // ВАЖНО: при каждом обновлении кода менять CACHE_NAME!
 
-const CACHE_NAME = 'surf-v3';
+const CACHE_NAME = 'surf-v4';
 const URLS_TO_CACHE = [
     './',
     './index.html',
     './manifest.json'
 ];
 
-// Установка — кешируем основные файлы
 self.addEventListener('install', event => {
     event.waitUntil(
         caches.open(CACHE_NAME)
@@ -17,7 +16,6 @@ self.addEventListener('install', event => {
     );
 });
 
-// Активация — удаляем старые кеши
 self.addEventListener('activate', event => {
     event.waitUntil(
         caches.keys().then(keys =>
@@ -29,14 +27,10 @@ self.addEventListener('activate', event => {
     );
 });
 
-// Fetch — СЕТЬ ПЕРВАЯ (network-first)
-// Сначала пробуем сеть, если нет — берём из кеша
-// Это решает проблему «SW держит старый кеш» (ошибка 9)
 self.addEventListener('fetch', event => {
     event.respondWith(
         fetch(event.request)
             .then(response => {
-                // Успешный ответ от сети — обновляем кеш
                 if (response.ok) {
                     const clone = response.clone();
                     caches.open(CACHE_NAME)
@@ -45,7 +39,6 @@ self.addEventListener('fetch', event => {
                 return response;
             })
             .catch(() => {
-                // Сеть недоступна — берём из кеша
                 return caches.match(event.request);
             })
     );
